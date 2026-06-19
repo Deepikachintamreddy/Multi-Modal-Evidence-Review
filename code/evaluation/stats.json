@@ -1,0 +1,11 @@
+{
+  "total_calls": 44,
+  "total_images": 82,
+  "total_input_tokens": 293231,
+  "total_output_tokens": 7673,
+  "errors": 0,
+  "retries": 0,
+  "start_time": 1781885132.8114955,
+  "elapsed_seconds": 702.2,
+  "avg_seconds_per_call": 16.0
+}
