@@ -33,40 +33,5 @@
       "value": 0.8333333333333334
     },
     "overall_weighted_score": 0.8841871921182267
-  },
-  "strategy_b": {
-    "claim_status": {
-      "metric": "accuracy",
-      "value": 0.85
-    },
-    "issue_type": {
-      "metric": "accuracy",
-      "value": 0.7
-    },
-    "object_part": {
-      "metric": "accuracy",
-      "value": 0.8
-    },
-    "evidence_standard_met": {
-      "metric": "accuracy",
-      "value": 1.0
-    },
-    "valid_image": {
-      "metric": "accuracy",
-      "value": 0.95
-    },
-    "severity": {
-      "metric": "accuracy",
-      "value": 0.6
-    },
-    "risk_flags": {
-      "metric": "f1",
-      "value": 0.8003571428571428
-    },
-    "supporting_image_ids": {
-      "metric": "f1",
-      "value": 0.95
-    },
-    "overall_weighted_score": 0.8224630541871921
   }
 }

@@ -1,98 +1,107 @@
 # Multi-Modal Evidence Review System
 
-A damage claim verification system that analyzes images against user claims to determine whether visual evidence supports, contradicts, or is insufficient for the claim.
+## Overview
+A system that verifies damage claims (car, laptop, package) using submitted images, claim conversations, user history, and evidence requirements. Built for the HackerRank Orchestrate June 2026 hackathon.
+
+## Quick Start
+
+### Prerequisites
+- Python 3.10+
+- Google Gemini API key
+
+### Setup
+```bash
+cd code
+pip install -r requirements.txt
+```
+
+Get your **FREE** API key at https://aistudio.google.com/apikey, then:
+```bash
+export GOOGLE_API_KEY=your-key-here          # Linux/Mac
+set GOOGLE_API_KEY=your-key-here              # Windows CMD
+$env:GOOGLE_API_KEY="your-key-here"           # Windows PowerShell
+```
+
+### Run Evaluation (on labeled sample data)
+```bash
+cd code/evaluation
+python main.py                   # runs both strategies, compares
+python main.py --strategy single_call   # run one strategy only
+```
+
+### Generate Predictions (on test data)
+```bash
+cd code
+python main.py --strategy single_call --output ../output.csv
+```
+
+### Options
+```
+--strategy {single_call,two_stage}   Processing strategy (default: single_call)
+--input PATH                         Custom input CSV path
+--output PATH                        Custom output CSV path
+--sample                             Run on sample_claims.csv instead
+--model MODEL_NAME                   Override VLM model name
+```
 
 ## Architecture
 
-The system uses a **single-pass VLM (Vision Language Model) pipeline** powered by Google Gemini 3.1 Flash-Lite (or other Gemini Flash models). For each claim, it:
-
-1. **Extracts the claim** from the user conversation (handles multi-language input)
-2. **Analyzes all submitted images** using the VLM in a single consolidated call
-3. **Cross-references evidence requirements** for the claim's object type
-4. **Assesses user risk** from historical claim data
-5. **Produces a structured verdict** with justification, risk flags, and severity
-
-### Key Design Decisions
-
-- **Single-pass approach**: Sends all images + context in one VLM call per claim (vs. separate calls per image) to reduce latency and cost while maintaining contextual coherence
-- **Anti-injection guardrails**: Explicitly instructs the VLM to ignore embedded instructions in user text or images
-- **Few-shot prompting**: Includes 8 diverse labeled examples covering supported, contradicted, and not_enough_information cases
-- **Strict output validation**: All generated values are validated against the allowed value lists before writing
-
-## Setup
-
-### 1. Install dependencies
-
-```bash
-cd code
-python -m pip install -r requirements.txt
 ```
-
-### 2. Set API key
-
-```bash
-# Windows PowerShell
-$env:GEMINI_API_KEY = "your-gemini-api-key"
-
-# Linux/macOS
-export GEMINI_API_KEY="your-gemini-api-key"
+claims.csv + user_history.csv + evidence_requirements.csv + images/
+    │
+    ▼
+┌────────────────────────────────────────┐
+│  Strategy: single_call                 │
+│  One VLM call per claim with:          │
+│  - All images (base64, resized)        │
+│  - Conversation text                   │
+│  - User history context                │
+│  - Evidence requirements               │
+│  → Structured JSON verdict             │
+├────────────────────────────────────────┤
+│  Strategy: two_stage                   │
+│  Stage 1: Text-only extraction (fast)  │
+│  Stage 2: Vision analysis with context │
+└────────────────────────────────────────┘
+    │
+    ▼
+Post-validation: enum coercion + history risk merge
+    │
+    ▼
+output.csv (14 columns, exact schema)
 ```
-
-Get a free API key at: https://aistudio.google.com/apikey
-
-### 3. Run on sample data (evaluation)
-
-```bash
-python main.py --sample --strategy A
-python main.py --sample --strategy B
-```
-
-### 4. Run evaluation
-
-```bash
-python evaluation/main.py --compare
-```
-
-### 5. Generate final predictions
-
-```bash
-python main.py
-```
-
-Output will be saved to `dataset/output.csv`.
 
 ## File Structure
-
 ```
 code/
-├── main.py                    # Entry point: processes claims → output.csv
-├── requirements.txt           # Python dependencies
-├── README.md                  # This file
-├── .env.example               # API key template
-├── config.py                  # Constants, allowed values, paths
-├── image_analyzer.py          # Gemini VLM image analysis (single & two-pass)
-├── prompt_templates.py        # All VLM prompts with few-shot examples
-├── utils.py                   # CSV I/O, validation, image loading, retry logic
-└── evaluation/
-    ├── main.py                # Evaluation entry point (metrics + report)
-    ├── evaluation_report.md   # Generated operational analysis
-    ├── stats.json             # Generated runtime statistics
-    └── evaluation_results.json# Generated evaluation metrics
+├── main.py              # CLI entry point
+├── config.py            # Constants, paths, allowed values
+├── models.py            # Pydantic data models
+├── utils.py             # CSV I/O, image loading, validation
+├── processor.py         # Core VLM processing (both strategies)
+├── prompts/
+│   ├── system_prompt.txt      # Main system prompt (single_call)
+│   ├── extraction_prompt.txt  # Stage 1 prompt (two_stage)
+│   └── analysis_prompt.txt    # Stage 2 prompt (two_stage)
+├── evaluation/
+│   ├── main.py                # Evaluation runner
+│   ├── evaluator.py           # Metrics computation
+│   └── evaluation_report.md   # Results + operational analysis
+├── requirements.txt
+└── README.md
 ```
 
-## Strategies
+## Key Design Decisions
 
-### Strategy A: Single-Pass (Default)
-One consolidated VLM call per claim with all images, conversation, user history, and evidence requirements. Outputs structured JSON directly.
+1. **Images are primary source of truth** — VLM directly inspects every image; justifications reference image IDs.
+2. **Prompt injection defense** — System prompt explicitly instructs the VLM to flag (never follow) embedded instructions. Detects `text_instruction_present` risk.
+3. **Color/side/identity matching** — Explicit instructions to verify object color, side, and identity against the claim.
+4. **Deterministic post-validation** — All VLM outputs are coerced to valid enum values. User history flags are merged additively.
+5. **Two strategies compared** — `single_call` (1 VLM call/claim) vs `two_stage` (2 calls/claim). Evaluation on labeled data determines the winner.
 
-### Strategy B: Two-Pass
-1. **Pass 1**: Analyze each image independently (object, damage, quality assessment)
-2. **Pass 2**: Synthesize all image analyses with claim context to produce final verdict
-
-## Evaluation
-
-The system is evaluated on `dataset/sample_claims.csv` (20 labeled examples) using:
-
-- **Exact match accuracy** for: claim_status, issue_type, object_part, evidence_standard_met, valid_image, severity
-- **Set-based F1** for: risk_flags, supporting_image_ids
-- **Weighted overall score** emphasizing claim_status and issue identification
+## Environment Variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GOOGLE_API_KEY` | (required) | Google AI Studio API key (FREE) |
+| `MODEL_VISION` | `gemini-2.0-flash-lite` | Vision model for analysis |
+| `MODEL_FAST` | `gemini-2.0-flash-lite` | Fast model for extraction |
